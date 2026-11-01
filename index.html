@@ -376,7 +376,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const STR_EX={};
-const JNT_EX={};function getEx(id){const e=LIB[id]||S.custom[id]||{id,name:id,m:'abs',sec:[],inc:5,lo:8,hi:12,est:20};if(S.settings&&e.cond&&e.time){const on=intSec()[0],k=id+on;return COND_EX[k]||(COND_EX[k]=Object.assign({},e,{lo:Math.max(15,on-10),hi:on}))}if(S.settings&&LIB[id]&&!e.bw&&!e.band&&e.m!=='abs'&&(jointOn()||S.settings.path==='toning')&&e.lo<10)return JNT_EX[id]||(JNT_EX[id]=Object.assign({},e,{lo:10,hi:Math.max(e.hi,15)}));if(S.settings&&S.settings.goal==='strength'&&LIB[id]&&e.sec.length&&e.lo>=8&&!e.bw&&e.m!=='abs')return STR_EX[id]||(STR_EX[id]=Object.assign({},e,{lo:5,hi:8}));return e}
+const JNT_EX={},CF_EX={};function getEx(id){const e=LIB[id]||S.custom[id]||{id,name:id,m:'abs',sec:[],inc:5,lo:8,hi:12,est:20};if(S.settings&&e.cond&&e.time){const on=intSec()[0],k=id+on;return COND_EX[k]||(COND_EX[k]=Object.assign({},e,{lo:Math.max(15,on-10),hi:on}))}if(S.settings&&S.settings.path==='cfirst'&&LIB[id]&&!e.bw&&!e.band&&!e.time&&!e.cond&&e.m!=='abs')return CF_EX[id]||(CF_EX[id]=Object.assign({},e,{lo:12,hi:15}));if(S.settings&&LIB[id]&&!e.bw&&!e.band&&e.m!=='abs'&&(jointOn()||S.settings.path==='toning')&&e.lo<10)return JNT_EX[id]||(JNT_EX[id]=Object.assign({},e,{lo:10,hi:Math.max(e.hi,15)}));if(S.settings&&S.settings.goal==='strength'&&LIB[id]&&e.sec.length&&e.lo>=8&&!e.bw&&e.m!=='abs')return STR_EX[id]||(STR_EX[id]=Object.assign({},e,{lo:5,hi:8}));return e}
 function unit(){return S.settings.unit}
 function incOf(ex){if(ex.band)return 1;if(S.incOv&&S.incOv[ex.id])return S.incOv[ex.id];return unit()==='kg'?(ex.inc>=10?5:2.5):ex.inc}
 function roundTo(x,inc){const r=Math.round(x/inc)*inc;return +Math.max(0,r).toFixed(2)}
@@ -418,7 +418,7 @@ function fatigue(now=Date.now()){
  const r={};for(const m in f)r[m]=Math.max(0,Math.min(100,Math.round(100-f[m]*100/9)));return r;
 }
 function lastTrained(m){let t=0;for(const w of S.workouts)for(const e of w.ex){const ex=getEx(e.id);if((ex.m===m)&&doneSets(e).length)t=Math.max(t,w.end||w.start)}return t}
-function weekCount(){return S.workouts.filter(w=>Date.now()-(w.end||w.start)<7*864e5&&w.ex.length).length}
+function weekCount(){return S.workouts.filter(w=>Date.now()-(w.end||w.start)<7*864e5&&(w.ex.length||w.cf)).length}
 function daysTarget(){const d=S.settings.days;return d==='4-5'?[4,5]:[+d,+d]}
 function hoursSince(m){const t=lastTrained(m);return t?(Date.now()-t)/36e5:Infinity}
 function recoveryMsgs(day){const msgs=[];const tooSoon=dayInfo(day).m.filter(m=>hoursSince(m)<48*recF());
@@ -474,7 +474,7 @@ function buildPlan0(day){
  }
  return plan;
 }
-function tplSlots(id){const T_=PRE[id];let s=T_.s;if(T_.addon)return s;const isAbs=x=>x.c.every(c=>(LIB[c]||{}).m==='abs'),am=absMode();if(am==='none')s=s.filter(x=>x.keep||!isAbs(x));else if(am==='all'&&!s.some(isAbs))s=s.concat([sl('absx',['cable_crunch','ab_crunch','knee_raise','dead_bug','h_plank','h_bird_dog'],2,2)]);s=s.filter(x=>!x.f||slotOn(x.f));if(jointOn()&&po().bal!=='0'&&!s.some(x=>x.k==='mob'))s=s.concat([sl('mob',PC.MOB,2)]);return s}
+function tplSlots(id){const T_=PRE[id];let s=T_.s;if(T_.addon)return s;if(T_.cfc)return [];const isAbs=x=>x.c.every(c=>(LIB[c]||{}).m==='abs'),am=absMode();if(am==='none')s=s.filter(x=>x.keep||!isAbs(x));else if(am==='all'&&!s.some(isAbs))s=s.concat([sl('absx',['cable_crunch','ab_crunch','knee_raise','dead_bug','h_plank','h_bird_dog'],2,2)]);s=s.filter(x=>!x.f||slotOn(x.f));if(jointOn()&&po().bal!=='0'&&!s.some(x=>x.k==='mob'))s=s.concat([sl('mob',PC.MOB,2)]);return s}
 function buildTplPlan(id){return planAdj(buildTplPlan0(id),id)}
 function buildTplPlan0(id){const T_=PRE[id];if(!T_)return[];const rec=fatigue();const used=new Set(),plan=[];
  for(const s of tplSlots(id)){const cands=s.c.filter(allowed).sort((a,b)=>prio(a)-prio(b));let pick=null;const pref=S.prefs[id+'.'+s.k];
@@ -491,11 +491,11 @@ function fitTime(plan){const exH=S.program==='express'&&atHome();if(!+S.settings
  for(let i=plan.length-1;i>=0&&planMinutes(plan)>max;i--)if(plan[i].t>1&&!isA(plan[i]))plan.splice(i,1);
  for(let g=0;g<40&&planMinutes(plan)>max;g++){let k=-1;for(let i=plan.length-1;i>=0;i--)if(plan[i].sets>2){k=i;break}if(k<0)break;plan[k]=Object.assign({},plan[k],{sets:plan[k].sets-1})}
  return plan}
-function tplMinutes(id){return Math.max(5,planMinutes(tplNominal(id))-(PRE[id].addon?warmMin():0))}
+function tplMinutes(id){if(PRE[id]&&PRE[id].cf)return cfMinutes(id);return Math.max(5,planMinutes(tplNominal(id))-(PRE[id].addon?warmMin():0))}
 function planMinutes(plan){return warmMin()+Math.round(plan.reduce((a,p)=>a+1.5+p.sets*(getEx(p.id).m==='abs'?1.5:((p.circ?20:restFor(p.id))/60+0.75)),0))}
 function prefillReps(id,rc,i){if(!rc.last){if(rc.seeded&&SEED[id].reps)return SEED[id].reps[Math.min(i,SEED[id].reps.length-1)];return getEx(id).lo}const ex=getEx(id);const s=rc.last.sets[i]||rc.last.sets[rc.last.sets.length-1];if(rc.w!==s.w)return ex.lo;return Math.min(ex.hi,s.r)}
 function makeExLog(p){let rc=recommend(p.id);if(p.adj)rc=Object.assign({},rc,{w:p.w,reason:p.reason});return{id:p.id,slot:p.slot||null,lo:p.lo,hi:p.hi,note:p.note||'',reason:rc.reason,isNew:rc.isNew,sets:Array.from({length:p.sets},(_,i)=>({w:rc.w,r:prefillReps(p.id,rc,i),done:false}))}}
-function startWorkout(day,tpl){if(tpl&&!PRE[tpl])tpl=null;const plan=tpl?buildTplPlan(tpl):buildPlan(day);S.current={id:uid(),day:tpl?PRE[tpl].day:day,start:Date.now(),ex:plan.map(makeExLog)};if(tpl){S.current.tpl=tpl;S.current.tplName=PRE[tpl].n}save();}
+function startWorkout(day,tpl){if(tpl&&!PRE[tpl])tpl=null;const plan=tpl?buildTplPlan(tpl):buildPlan(day);S.current={id:uid(),day:tpl?PRE[tpl].day:day,start:Date.now(),ex:plan.map(makeExLog)};if(tpl){S.current.tpl=tpl;S.current.tplName=PRE[tpl].n;if(PRE[tpl].cf)cfStartSetup(S.current,tpl)}save();}
 function bests(id,beforeT){let bw=0,be=0;for(const s of sessionsFor(id)){if(beforeT!=null&&s.t>=beforeT)continue;for(const x of s.sets){be=Math.max(be,e1rm(x.w,x.r));bw=Math.max(bw,x.w)}}return{bw,be}}
 function finishWorkout(){
  const c=S.current;if(!c)return null;c.end=Date.now();
@@ -554,7 +554,7 @@ function vToday(){
  h+=pathCards();
  h+=tipsCard(3);
  recoveryMsgs(day).forEach(m=>{h+=`<div class="card" style="border-color:var(--warn)">⚠️ ${esc(m)}</div>`});
- h+=`<h2>Recommended · ${plan.length} exercises · ~${planMinutes(plan)} min lifting</h2>`;
+ h+=pk.tpl&&PRE[pk.tpl].cf?cfTodayHtml(pk,plan):`<h2>Recommended · ${plan.length} exercises · ~${planMinutes(plan)} min lifting</h2>`;
  h+=plan.map((p,i)=>{const ex=getEx(p.id);return `<div class="card"><div class="ex-h"><div class="sp"><h3>${i+1}. ${esc(ex.name)} ${p.isNew?(S.startW[p.id]!=null?'<span class="badge g">START</span>':'<span class="badge">NEW</span>'):''}</h3>
   <div class="sm mut">${MUSCLES[ex.m].n}${ex.assist?' · assist weight (lower = harder)':''}${ex.bw&&!ex.track?' · bodyweight (0 = no added weight)':''}${ex.time?' · timed hold (seconds)':ex.track==='reps'?' · bodyweight reps':ex.band?' · resistance band':''}</div></div>
   <div style="text-align:right"><div style="font-weight:700;font-size:18px">${esc(loadTxt(ex,p.w))}</div><div class="sm">${p.sets} × ${repsTxt(ex,p.lo,p.hi)}</div></div></div>
@@ -562,7 +562,7 @@ function vToday(){
   ${p.note?`<div class="xs" style="color:var(--warn);margin-top:4px">${esc(p.note)}</div>`:''}
   ${cueHtml(ex,1)}${howtoHtml(ex)}
   <div class="row" style="margin-top:8px">${p.isNew?`<button class="btn-s" data-act="setStart" data-id="${p.id}">Set starting weight</button>`:''}<button class="btn-s" data-act="swapPlan" data-slot="${p.slot}" data-id="${p.id}">⇄ Swap</button></div></div>`}).join('');
- if(S.settings.treadmill)h+=`<div class="card"><h3>🏃 ${esc(cardioName())} finisher</h3><div class="xs mut">${S.settings.cardioPref?'Target: '+S.settings.cardioPref.min+' min '+esc((CT_NAME[S.settings.cardioPref.type]||'').toLowerCase())+' — log it with the timer at the end of your workout.':'Optional after lifting — not tracked unless you enter minutes at the end.'}</div></div>`;
+ if(S.settings.treadmill&&!(pk.tpl&&PRE[pk.tpl].cf))h+=`<div class="card"><h3>🏃 ${esc(cardioName())} finisher</h3><div class="xs mut">${S.settings.cardioPref?'Target: '+S.settings.cardioPref.min+' min '+esc((CT_NAME[S.settings.cardioPref.type]||'').toLowerCase())+' — log it with the timer at the end of your workout.':'Optional after lifting — not tracked unless you enter minutes at the end.'}</div></div>`;
  h+=`<button class="btn-p btn-big" data-act="start" data-v="${day}" ${pk.tpl?`data-tpl="${pk.tpl}"`:''} style="margin-top:8px">Start ${esc(pk.tpl?PRE[pk.tpl].n:DAYS[day].n+' workout')}</button><button class="btn-big" data-act="cardioOnly" style="margin-top:8px">🏃 Log cardio only</button>`;
  h+=vRecovery(info.m);
  return h;
@@ -570,7 +570,7 @@ function vToday(){
 function vWorkout(){
  const c=S.current;const mins=Math.floor((Date.now()-c.start)/60000);const tot=c.ex.reduce((a,e)=>a+e.sets.length,0),dn=c.ex.reduce((a,e)=>a+e.sets.filter(s=>s.done).length,0);
  let h=`<div class="row"><div><div class="xs mut">In progress · <span id="elapsed">${mins}</span> min · ${dn}/${tot} sets</div><h1>${esc(wName(c))} workout</h1></div><span class="sp"></span><button class="btn-p" data-act="finish">Finish</button></div>`;
- h+=`<div class="bar" style="margin:8px 0 4px"><i style="width:${tot?dn/tot*100:0}%;background:var(--acc)"></i></div>`;
+ h+=`<div class="bar" style="margin:8px 0 4px"><i style="width:${tot?dn/tot*100:0}%;background:var(--acc)"></i></div>`;if(c.cf)h+=cardioCard(c)+(c.ex.length?`<h2>💪 Strength block · ${c.ex.length} moves · 2 sets · 12–15 reps</h2>`:'');
  if(c.tpl&&circOn(c.tpl)){const [on,off]=intSec();h+=`<div class="card" style="border-color:var(--blue)">🔁 <b>Circuit</b> <span class="sm mut">Do one set of each exercise back-to-back (~20 s between moves), rest 60–90 s after each round, repeat until all sets are done.${PRE[c.tpl].grp==='paths'&&pathOf()==='athletic'?' Timed moves: '+on+' s work / '+off+' s rest — use the interval timer below.':''}</span></div>`}
  h+=c.ex.map((e,ei)=>{const ex=getEx(e.id);const inc=incOf(ex);return `<div class="card" id="ex${ei}"><div class="ex-h"><div class="sp"><h3>${esc(ex.name)} ${e.isNew?'<span class="badge">NEW</span>':''}</h3>
   <div class="sm mut">${MUSCLES[ex.m]?MUSCLES[ex.m].n:''} · target ${repsTxt(ex,e.lo,e.hi)}${ex.time?'':' reps'}${RT(ex)?'':ex.band?' · band level':' · step '+inc+' '+unit()}${ex.assist?' · assist (lower = harder)':''}</div>
@@ -582,7 +582,7 @@ function vWorkout(){
    <div class="stp"><button data-act="adj" data-ei="${ei}" data-si="${si}" data-f="r" data-v="-${ex.time?5:1}">−</button><input inputmode="numeric" value="${s.r}" data-act="inp" data-ei="${ei}" data-si="${si}" data-f="r"><button data-act="adj" data-ei="${ei}" data-si="${si}" data-f="r" data-v="${ex.time?5:1}">+</button></div>
    <button class="ck ${s.done?'on':''}" data-act="done" data-ei="${ei}" data-si="${si}" aria-label="Set done">✓</button></div>`).join('')}
   <div class="row"><button class="btn-s" data-act="addSet" data-ei="${ei}">+ Set</button>${e.sets.length>1?`<button class="btn-s" data-act="rmSet" data-ei="${ei}">− Set</button>`:''}</div></div>`}).join('');
- h+=cardioCard(c);
+ if(!c.cf)h+=cardioCard(c);
  h+=`<button class="btn-big" data-act="addEx">+ Add exercise</button>${cardioShown(c)?'':'<button class="btn-big" data-act="cardioAdd" style="margin-top:8px">🏃 + Cardio (with timer)</button>'}${c.day!=='core'?`<button class="btn-big" data-act="addTpl" data-v="core" style="margin-top:8px">+ Abs &amp; Core finisher (~${tplMinutes('core')} min)</button>`:''}<div class="row" style="margin-top:10px"><button class="btn-s" data-act="rest">Start rest timer (${S.settings.rest}s)</button><span class="sp"></span><button class="btn-s btn-d" data-act="discard">Discard workout</button></div><button class="btn-p btn-big" data-act="finish" style="margin-top:14px">Finish workout</button>`;
  return h;
 }
@@ -624,14 +624,14 @@ function weekStart(t){const d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDat
 function lastWeeks(n){const out=[];const d=new Date(weekStart(Date.now()));for(let i=0;i<n;i++){const s=d.getTime();const e=new Date(d);e.setDate(e.getDate()+7);out.unshift({s,e:e.getTime(),lbl:(d.getMonth()+1)+'/'+d.getDate()});d.setDate(d.getDate()-7)}return out}
 function setsByMuscle(from,to){const f={};for(const m in MUSCLES)f[m]=0;for(const w of S.workouts){const t=wTime(w);if(t<from||t>=to)continue;
  for(const e of w.ex){const ex=getEx(e.id),n=doneSets(e).length;if(!n)continue;if(f[ex.m]!=null)f[ex.m]+=n;(ex.sec||[]).forEach(s=>{if(f[s]!=null)f[s]+=n*.5})}}return f}
-function weekStreak(){const lo=daysTarget()[0],ws=lastWeeks(104),cnt=ws.map(w=>S.workouts.filter(x=>wTime(x)>=w.s&&wTime(x)<w.e&&x.ex.length).length);let i=cnt.length-1,n=0;if(cnt[i]>=lo)n++;i--;for(;i>=0&&cnt[i]>=lo;i--)n++;return n}
+function weekStreak(){const lo=daysTarget()[0],ws=lastWeeks(104),cnt=ws.map(w=>S.workouts.filter(x=>wTime(x)>=w.s&&wTime(x)<w.e&&(x.ex.length||x.cf)).length);let i=cnt.length-1,n=0;if(cnt[i]>=lo)n++;i--;for(;i>=0&&cnt[i]>=lo;i--)n++;return n}
 function bwTrend(B){let tr=null,pt=0;return B.map(b=>{if(tr==null)tr=b.w;else{const days=Math.max(.5,(b.t-pt)/DAY);const a=1-Math.pow(.85,days);tr+=a*(b.w-tr)}pt=b.t;return{t:b.t,y:tr}})}
 function bwRate(B){const now=Date.now(),r=B.filter(b=>now-b.t<28*DAY);if(r.length<2||r[r.length-1].t-r[0].t<5*DAY)return null;
  const xs=r.map(b=>b.t/DAY),ys=r.map(b=>b.w),mx=xs.reduce((a,b)=>a+b,0)/xs.length,my=ys.reduce((a,b)=>a+b,0)/ys.length;let nu=0,de=0;xs.forEach((x,i)=>{nu+=(x-mx)*(ys[i]-my);de+=(x-mx)*(x-mx)});return de?nu/de*7:null}
 /* ====================== PROGRESS ====================== */
 let progTab='lifts',progMetric='e1rm',volMus='back',openTpl=null;
-function vProgress(){
- let h=`<h1>Progress</h1>${wlDash()}<div class="seg" style="margin:8px 0">${[['lifts','Lifts'],['volume','Volume'],['weeks','Weeks'],['body','Body'],['cardio','Cardio']].map(([k,l])=>`<button class="${progTab===k?'on':''}" data-act="progTab" data-v="${k}">${l}</button>`).join('')}</div>`;
+let PT_PICK=0;function vProgress(){if(cfOn()&&!PT_PICK)progTab='cardio';
+ let h=`<h1>Progress</h1>${wlDash()}${cfDash()}<div class="seg" style="margin:8px 0">${[['lifts','Lifts'],['volume','Volume'],['weeks','Weeks'],['body','Body'],['cardio','Cardio']].map(([k,l])=>`<button class="${progTab===k?'on':''}" data-act="progTab" data-v="${k}">${l}</button>`).join('')}</div>`;
  if(gameOn()){const L=gameLedger();h+=`<button class="li card sys" data-act="nav" data-v="game" style="display:flex;align-items:center;gap:10px;padding:10px 12px"><span class="rank" style="width:36px;height:36px;font-size:20px">${rankOf(L.lv.l)[0]}</span><span class="sp"><b>Game Mode · Level ${L.lv.l}</b>${xpBar(L.lv)}</span><span>›</span></button>`}
  return h+(progTab==='cardio'?pCardio():progTab==='volume'?pVolume():progTab==='weeks'?pWeeks():progTab==='body'?pBody():pLifts())}
 function pLifts(){
@@ -662,7 +662,7 @@ function pVolume(){
  return h}
 function pWeeks(){
  if(!S.workouts.length)return `<div class="empty">🗓️ Your weekly workout count and streak show up here after your first workout.</div>`;
- const wk=lastWeeks(12),cnt=wk.map(w=>S.workouts.filter(x=>wTime(x)>=w.s&&wTime(x)<w.e&&x.ex.length).length),lo=daysTarget()[0];
+ const wk=lastWeeks(12),cnt=wk.map(w=>S.workouts.filter(x=>wTime(x)>=w.s&&wTime(x)<w.e&&(x.ex.length||x.cf)).length),lo=daysTarget()[0];
  const durs=S.workouts.slice().sort((a,b)=>wTime(b)-wTime(a)).slice(0,10).map(w=>w.end?(w.end-w.start)/6e4-(w.cardio||0):0).filter(m=>m>=10&&m<=180);
  const avg=durs.length?Math.round(durs.reduce((a,b)=>a+b,0)/durs.length):null,streak=weekStreak();
  const cardio=S.workouts.filter(w=>Date.now()-wTime(w)<28*DAY).reduce((a,w)=>a+(w.cardio||0),0);
@@ -759,7 +759,7 @@ function coachTips(){
  const open=ws.filter(w=>now-wTime(w)<14*DAY&&w.end&&(w.end-w.start)/6e4-(w.cardio||0)>180);
  if(open.length)add(20,'info','⏱️','Tap Finish when you’re done',`${open.length} recent workout${open.length>1?'s were':' was'} left open for 3+ hours, which throws off the session-length tips.`);
  // weekly goal (calendar week, Monday start)
- const thisWk=ws.filter(w=>wTime(w)>=weekStart(now)&&w.ex&&w.ex.length).length,lo=daysTarget()[0],dow=(new Date(now).getDay()+6)%7,left=7-dow,need=lo-thisWk;
+ const thisWk=ws.filter(w=>wTime(w)>=weekStart(now)&&w.ex&&(w.ex.length||w.cf)).length,lo=daysTarget()[0],dow=(new Date(now).getDay()+6)%7,left=7-dow,need=lo-thisWk;
  if(dow>=3&&need>0&&need<=left)add(45,'info','🗓️',`${thisWk} of ${lo}+ workouts this week`,`${need} more to hit your goal, with ${left} day${left>1?'s':''} left (the week resets Monday).${need>=left-1?' Express workouts make it easier to fit them in.':''}`);
  else if(need<=0)add(14,'good','✅','Weekly goal hit',`${thisWk} workouts this week. Anything extra is a bonus — a rest or treadmill-only day is fine.`);
  // positive progress
@@ -818,7 +818,7 @@ function vSettings(){
  <div class="card"><label class="row"><input type="checkbox" data-act="tog" data-v="game" ${S.settings.game===true?'checked':''} style="width:22px;height:22px"> <span class="sp"><b>🎮 Try Game Mode</b><div class="xs mut">Optional: levels, XP, a stats radar, weekly quests and badges, all worked out from your own logs. Off by default.</div></span></label>${S.settings.game===true?'<button class="btn-s" data-act="nav" data-v="game" style="margin-top:8px">Open Game Mode</button>':''}</div>
  <div class="card"><h3>Backup</h3><div class="xs mut">Data lives only on this phone. Export now and then.</div><div class="row wrap" style="margin-top:8px"><button data-act="export">Export JSON</button><button data-act="copyExport">Copy JSON</button><button data-act="import">Import JSON</button></div><input type="file" id="importFile" accept="application/json,.json" style="display:none"></div>
  <div class="card"><h3>How recommendations work</h3><div class="sm mut">Double progression: stay at a weight until every set hits the top of the rep range, then go up one machine step. Miss the bottom of the range two sessions in a row and it deloads ~10%. Recovery bars estimate each muscle's fatigue from sets done in the last 2–3 days; low-recovery muscles get fewer sets, and accessory exercises rotate each session. Prebuilt workouts (Plans tab) use the same progression — your weights follow each exercise wherever it shows up.</div><div class="sm mut" style="margin-top:6px"><b>Coach tips</b> are simple rules run on your own logs on this phone (stalls, missed reps, ready to go up, weekly sets per muscle, gaps, session length, bodyweight trend). No internet or AI service is used.</div></div>
- <button class="btn-big btn-d" data-act="reset">Reset this profile's data</button><button class="btn-big btn-d" data-act="delProf" style="margin-top:8px">Delete this profile</button><div class="xs mut" style="text-align:center;margin-top:10px">Lift Coach · works offline · v6</div>`;
+ <button class="btn-big btn-d" data-act="reset">Reset this profile's data</button><button class="btn-big btn-d" data-act="delProf" style="margin-top:8px">Delete this profile</button><div class="xs mut" style="text-align:center;margin-top:10px">Lift Coach · works offline · v7</div>`;
 }
 function settingsProfileCard(){const p=profById(PROF.last);if(!p)return '';return `<div class="card"><div class="row">${avatar(p,46)}<div class="sp"><b style="font-size:18px">${esc(p.name)}</b><div class="xs mut">Profile stored only on this phone${p.pin?' · PIN on':''}</div></div></div><div class="row wrap" style="margin-top:10px"><button class="btn-s" data-act="switchProf">⇄ Switch profile</button><button class="btn-s" data-act="redoSetup">↻ Redo setup</button><button class="btn-s" data-act="renameProf">Rename</button><button class="btn-s" data-act="pinProf">${p.pin?'Change / remove PIN':'Set PIN'}</button></div><div class="xs mut" style="margin-top:6px">Redo setup asks the questions again and rebuilds your plan. Workout history, PRs and bodyweight are kept.</div></div>`}
 /* ====================== PROFILES (local only) ====================== */
@@ -902,8 +902,8 @@ function obHomeStep(a){const h=a.home,u=a.unit||OB_DEF.unit;const chip=(k,v,on,l
 function homeEqFromAnswers(h){return{db:!!h.db,dbType:h.dbType||'adjustable',dbMax:parseFloat(h.dbMax)||0,kb:!!h.kb,kbMax:parseFloat(h.kbMax)||0,bandLoop:!!(h.bands&&h.bandLoop!==false),bandHandle:!!(h.bands&&h.bandHandle),pullup:!!h.pullup,bench:h.bench?(h.benchType==='adj'?'adj':'flat'):'none',ball:!!h.ball,mat:!!h.mat,cardio:h.cardio?Object.keys(h.ck||{}).filter(k=>h.ck[k]):[],cable:!!h.cable,barbell:!!h.barbell}}
 function answersFromHomeEq(q){q=q||{};const a={db:!!q.db,dbType:q.dbType||'adjustable',dbMax:q.dbMax||'',kb:!!q.kb,kbMax:q.kbMax||'',bands:!!(q.bandLoop||q.bandHandle),bandLoop:q.bandLoop!==false,bandHandle:!!q.bandHandle,pullup:!!q.pullup,bench:!!q.bench&&q.bench!=='none',benchType:q.bench==='adj'?'adj':'flat',ball:!!q.ball,mat:!!q.mat,cardio:!!(q.cardio&&q.cardio.length),ck:{},cable:!!q.cable,barbell:!!q.barbell};(q.cardio||[]).forEach(c=>a.ck[c]=true);if(!Object.keys(a).some(k=>a[k]===true&&!['bandLoop'].includes(k)))a.none=true;return a}
 function obSteps(){const a=OB&&OB.a||{},w=a.where,p=a.path||'standard';
- const goal=['standard','beginner','ret'].includes(p)?['goal']:[],exp=['standard','ret','glutes','athletic','toning','joint'].includes(p)?['exp']:[],split=['standard','ret'].includes(p)?['split']:[],cardio=p==='weightloss'?[]:['cardio'];
- return ['name','age','units','path'].concat(PATH_STEPS[p]||[],goal,exp,['where'],w==='home'?['homeeq']:w==='hybrid'?['homeeq','equip']:['equip'],['days','len'],split,['limits'],cardio,['abs','bw','startw','game','summary'])}
+ const cf=p==='cfirst',goal=['standard','beginner','ret'].includes(p)?['goal']:[],exp=['standard','ret','glutes','athletic','toning','joint'].includes(p)?['exp']:[],split=['standard','ret'].includes(p)?['split']:[],cardio=p==='weightloss'?[]:['cardio'];
+ return ['name','age','units','path'].concat(PATH_STEPS[p]||[],goal,exp,['where'],w==='home'?['homeeq']:w==='hybrid'?['homeeq','equip']:['equip'],cf?['days']:['days','len'],split,['limits'],cf?[]:cardio,cf?['bw','startw','game','summary']:['abs','bw','startw','game','summary'])}
 function homeEqTxt(h,u){h=h||{};const x=[];if(h.db)x.push((h.dbType==='fixed'?'fixed':'adjustable')+' dumbbells'+(h.dbMax?' up to '+h.dbMax+' '+(u||unit()):''));if(h.kb)x.push('kettlebell'+(h.kbMax?' up to '+h.kbMax+' '+(u||unit()):''));if(h.bandLoop||h.bandHandle)x.push([h.bandLoop?'loop':'',h.bandHandle?'handle':''].filter(Boolean).join(' + ')+' bands');if(h.pullup)x.push('pull-up bar');if(h.bench&&h.bench!=='none')x.push((h.bench==='adj'?'adjustable':'flat')+' bench');if(h.ball)x.push('stability ball');if(h.mat)x.push('mat');if(h.cardio&&h.cardio.length)x.push(h.cardio.join('/'));if(h.cable)x.push('cable machine');if(h.barbell)x.push('barbell (alternatives used)');return x.length?x.join(', '):'bodyweight only'}
 /* ====================== GAME MODE (opt-in; off by default) ======================
    Everything is derived from this profile's own logs, so it is deterministic and can be recomputed at any time.
@@ -917,7 +917,7 @@ function goalDays(){return Math.max(1,parseInt(S.settings.days)||3)}
 function weekStart(t){const d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()}
 function isAbsId(id){return (getEx(id)||{}).m==='abs'}
 // weekly quests: tailored to the profile's goal
-function questsFor(goal){const N=goalDays(),q=[{id:'wk',n:'Finish '+N+' workout'+(N>1?'s':'')+' this week',xp:50,need:N,val:x=>x.n}];
+function questsFor(goal){if(S.settings.path==='cfirst')return cfQuests();const N=goalDays(),q=[{id:'wk',n:'Finish '+N+' workout'+(N>1?'s':'')+' this week',xp:50,need:N,val:x=>x.n}];
  if(goal==='fat'||goal==='recomp')q.push({id:'cardio',n:'Log '+(goal==='fat'?40:20)+' cardio minutes',xp:30,need:goal==='fat'?40:20,val:x=>x.cardio});
  else if(goal==='strength')q.push({id:'pr',n:'Hit a PR',xp:30,need:1,val:x=>x.prs});
  else if(goal==='muscle')q.push({id:'sets',n:'Complete '+(N*12)+' working sets',xp:30,need:N*12,val:x=>x.sets});
@@ -925,16 +925,16 @@ function questsFor(goal){const N=goalDays(),q=[{id:'wk',n:'Finish '+N+' workout'
  q.push(S.settings.absMode==='none'?{id:'bw',n:'Log your bodyweight',xp:15,need:1,val:x=>x.bw}:{id:'core',n:'Do 6 sets of core work',xp:15,need:6,val:x=>x.core});
  return q}
 let GCACHE=null;
-function gameLedger(){const key=KEY+'|'+S.workouts.length+'|'+(S.body||[]).length+'|'+(S.workouts.length?wTime(S.workouts[S.workouts.length-1]):0)+'|'+S.settings.goal+'|'+S.settings.days+'|'+S.settings.absMode+'|'+((S.game&&S.game.placement||{}).t||0)+'|'+(S.body||[]).length;
+function gameLedger(){const key=KEY+'|'+S.workouts.length+'|'+(S.body||[]).length+'|'+(S.workouts.length?wTime(S.workouts[S.workouts.length-1]):0)+'|'+S.settings.goal+'|'+S.settings.days+'|'+S.settings.absMode+'|'+(S.settings.path||'')+'|'+JSON.stringify(S.settings.pathOpt||{})+'|'+((S.game&&S.game.placement||{}).t||0)+'|'+(S.body||[]).length;
  if(GCACHE&&GCACHE.key===key)return GCACHE;
  const ev=[],weeks={},best={},stats={workouts:0,prs:0,cardio:0,sets:0,bw:0,maxStreak:0};
  const wk=t=>{const k=weekStart(t);return weeks[k]||(weeks[k]={t:k,n:0,cardio:0,prs:0,sets:0,core:0,bw:0})};
  const ws=S.workouts.slice().sort((a,b)=>wTime(a)-wTime(b));
- for(const w of ws){const t=wTime(w),W=wk(t);let n=0,prs=0;
+ for(const w of ws){const t=wTime(w),W=wk(t);let n=0,prs=0;W.long=Math.max(W.long||0,0,...cardioLogOf(w).map(e=>+e.min||0));
   for(const e of w.ex){const ex=getEx(e.id),ds=doneSets(e);n+=ds.length;if(ex.m==='abs')W.core+=ds.length;if(!ds.length)continue;
    const sc=RT(ex)?Math.max(...ds.map(x=>x.r)):(ex.assist||ex.band)?null:Math.max(...ds.map(x=>e1rm(x.w,x.r)));
    if(sc!=null&&sc>0){if(best[e.id]!=null&&sc>best[e.id]+0.01)prs++;best[e.id]=Math.max(best[e.id]||0,sc)}}
-  if(!n){const c=Math.min(60,+w.cardio||0);if(c>0){W.cardio+=c;stats.cardio+=c;ev.push({t,xp:Math.min(45,c),why:c+' min cardio'})}continue}stats.workouts++;stats.sets+=n;W.n++;W.sets+=n;prs=Math.min(prs,3);W.prs+=prs;stats.prs+=prs;
+  if(!n){const c=Math.min(60,+w.cardio||0);if(c>0){W.cardio+=c;stats.cardio+=c;ev.push({t,xp:Math.min(45,c),why:c+' min cardio'})}if(w.cf&&c>0){W.n++;stats.workouts++;ev.push({t,xp:20,why:'Cardio session: '+wName(w)})}continue}stats.workouts++;stats.sets+=n;W.n++;W.sets+=n;prs=Math.min(prs,3);W.prs+=prs;stats.prs+=prs;
   ev.push({t,xp:20+Math.min(40,2*n),why:'Workout: '+wName(w)});if(prs)ev.push({t,xp:15*prs,why:prs+' PR'+(prs>1?'s':'')});
   const c=Math.min(60,+w.cardio||0);if(c>0){W.cardio+=c;stats.cardio+=c;ev.push({t,xp:Math.min(45,c),why:c+' min cardio'})}}
  const days=new Set();for(const b of (S.body||[])){const d=new Date(b.t).toDateString();if(days.has(d))continue;days.add(d);wk(b.t).bw++;stats.bw++;ev.push({t:b.t,xp:5,why:'Logged bodyweight'})}
@@ -1028,7 +1028,7 @@ const CTYPES=[['treadmill','Treadmill','🏃'],['walk','Walk outside','🚶'],['
 const CT_NAME=Object.fromEntries(CTYPES.map(x=>[x[0],x[1]]));CT_NAME.legacy='Cardio';
 function pathOf(){return S.settings.path||null}
 function po(){return Object.assign({},OB_PO_DEF,S.settings.pathOpt||{})}
-function slotOn(f){const o=po();if(f==='quads')return pathOf()!=='glutes'||o.quads!=='0';return pathOf()==='weightloss'&&!!(o.focus||{})[f]}
+function slotOn(f){const o=po();if(f==='cf5')return o.wdays!=='all';if(f==='quads')return pathOf()!=='glutes'||o.quads!=='0';return pathOf()==='weightloss'&&!!(o.focus||{})[f]}
 function impactMax(){const o=po(),a=ageN(),L=S.settings.limits||{};let m=pathOf()==='athletic'?({low:0,mod:1,high:2}[o.int]??1):1;if(L.knees||L.back||jointOn()||a>=60)m=Math.min(m,0);else if(a>=50||(a&&a<18))m=Math.min(m,1);return m}
 function circOn(id){const T_=PRE[id];return !!T_&&(!!T_.circuit||(!!S.settings.circuit&&T_.grp==='paths'&&pathOf()==='weightloss'))}
 function intSec(){return {low:[20,40],mod:[30,30],high:[40,20]}[po().int]||[30,30]}
@@ -1103,29 +1103,29 @@ const HOWTO={chest_press:'Seat height: handles level with mid-chest. Press forwa
 function howtoHtml(ex){if(!S.settings.howto)return '';if(sessionsFor(ex.id).length>=3)return '';const t=HOWTO[ex.id]||(ex.time?'Hold with steady breathing; stop when your form slips.':ex.band?'Anchor the band securely; pick a band you can do about 15 clean reps with.':RT(ex)||ex.bw?'Move slowly with good form; stop 1–2 reps before your form breaks.':ex.db?'Pick a weight you could lift about 15 times. Control it on the way down.':CABLE.has(ex.id)?'Set the pulley height, step back until the weight lifts off the stack, brace and move smoothly.':'Set the seat so the handles/pad line up with the joint that moves. Start light: 2 s up, 2–3 s down.');
  return `<div class="xs" style="margin-top:6px;padding:8px;border-radius:8px;background:#13233a;color:#cfe3ff">📘 <b>How to:</b> ${esc(t)}</div>`}
 /* ---- Today / Settings / summary bits */
-function pathCards(){let h='';const R=rampInfo();
+function pathCards(){let h=cfWeekCard();const R=rampInfo();
  if(R&&!R.done){const pct=Math.round((R.wk+1)/R.weeks*100);h+=`<div class="card" style="border-color:var(--blue)"><div class="row"><b class="sp">🔄 Return ramp · week ${R.wk+1} of ${R.weeks}</b><span class="badge">${Math.round(R.f*100)}% loads</span></div><div class="bar" style="margin:8px 0"><i style="width:${pct}%;background:var(--blue)"></i></div><div class="sm mut">${R.sets} sets per exercise at about ${Math.round(R.f*100)}% of your old working weights. ${R.next>=1?'After this week: back to normal progression.':'Next week: about '+Math.round(R.next*100)+'%.'} Stop any set that hurts.</div><button class="btn-s" data-act="rampEnd" style="margin-top:8px">End ramp early</button></div>`}
  else if(R&&R.done&&R.wk<R.weeks+1)h+=`<div class="card">✅ <b>Return ramp complete.</b> <span class="sm mut">Normal progression is back on.</span></div>`;
  if(begWeek1())h+=`<div class="card" style="border-color:var(--acc2)">🌱 <b>Week 1: keep it light.</b> <span class="sm mut">Weights start lower so you can learn each move. 📘 How-to tips show on new exercises.</span></div>`;
  const cp=S.settings.cardioPref;if(cp&&pathOf()==='weightloss'){const m=cardioWeek(0),tg=cardioTarget();h+=`<div class="row xs mut" style="margin-top:4px">🏃 Cardio this week: <b style="margin:0 4px;color:var(--tx)">${m}</b> / ${tg} min (${esc(CT_NAME[cp.type]||'cardio')})</div>`}
  return h}
-function cardioTarget(){const cp=S.settings.cardioPref;return cp?(+cp.min||20)*daysTarget()[0]:0}
+function cardioTarget(){if(pathOf()==='cfirst')return cfTarget();const cp=S.settings.cardioPref;return cp?(+cp.min||20)*daysTarget()[0]:0}
 function settingsPathCard(){const P=pathOf();if(!P)return '';const p=PATHS[P],o=po();let x=[];
  if(P==='weightloss')x.push('Focus: '+Object.keys(o.focus||{}).filter(k=>o.focus[k]).map(k=>({full:'full body',glutes:'glutes & legs',arms:'arms & shoulders',core:'core & waist',back:'back & posture'}[k])).join(', '),(o.style==='circuit'?'Circuits':'Regular sets'),'Cardio: '+(CT_NAME[o.ctype]||o.ctype)+' '+o.cmin+' min');
  if(P==='glutes')x.push(o.gdays+' glute days/week',o.quads==='0'?'no quad moves':'quads included');if(P==='athletic')x.push('Interval tolerance: '+({low:'easy',mod:'moderate',high:'hard'}[o.int]),'Kit: '+(Object.keys(o.athEq||{}).filter(k=>o.athEq[k]&&k!=='none').join(', ')||'none'));
  if(P==='joint')x.push(o.bal==='0'?'no balance block':'balance & mobility each session');if(P==='ret'){const R=rampInfo();x.push(R?(R.done?'ramp complete':'ramp week '+(R.wk+1)+' of '+R.weeks):'')}
- if(P==='beginner')x.push('how-to tips on','slower progression');
+ if(P==='cfirst')x.push(...cfBits());if(P==='beginner')x.push('how-to tips on','slower progression');
  return `<div class="card"><div class="row"><span style="font-size:24px">${p.i}</span><div class="sp"><b>Path: ${esc(p.n)}</b><div class="xs mut">${esc(x.filter(Boolean).join(' · '))}</div></div></div><button class="btn-s" data-act="redoSetup" style="margin-top:8px">Change path (Redo setup — keeps history)</button></div>`}
 /* ---- tracked cardio */
 function cardioLogOf(w){return w.cardioLog&&w.cardioLog.length?w.cardioLog:(w.cardio>0?[{type:'legacy',min:w.cardio}]:[])}
 function cardioEntries(){const out=[];for(const w of S.workouts)cardioLogOf(w).forEach(e=>out.push(Object.assign({t:wTime(w)},e)));return out.sort((a,b)=>a.t-b.t)}
 function cardioWeek(back){const s=weekStart(Date.now())-back*7*864e5,e=s+7*864e5;return S.workouts.filter(w=>wTime(w)>=s&&wTime(w)<e).reduce((a,w)=>a+(+w.cardio||0),0)+(back===0&&S.current&&S.current.cardio>0?0:0)}
 function cardioShown(c){return (S.settings.treadmill&&!c.cardioSkip)||c.cardioShow||c.cardioOnly||(c.cardioLog||[]).length>0}
-function defCType(){const cp=S.settings.cardioPref;if(cp&&cp.type&&cp.type!=='none')return cp.type;if(pathOf()==='athletic')return 'intervals';if(atHome()){const c=(S.settings.homeEq||{}).cardio||[];if(c[0])return c[0];return 'walk'}return S.noSeed?'treadmill':'treadmill'}
+function defCType(){if(pathOf()==='cfirst')return cfSession(1).type;const cp=S.settings.cardioPref;if(cp&&cp.type&&cp.type!=='none')return cp.type;if(pathOf()==='athletic')return 'intervals';if(atHome()){const c=(S.settings.homeEq||{}).cardio||[];if(c[0])return c[0];return 'walk'}return S.noSeed?'treadmill':'treadmill'}
 function ctEl(t){return (t.acc||0)+(t.run?Date.now()-t.start:0)}
 function fmtClock(ms){ms=Math.max(0,ms);const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function ctView(t){const el=ctEl(t);if(t.mode==='cd')return{clock:fmtClock(t.cd*60000-el),ph:'Countdown · '+t.cd+' min'};
- if(t.mode==='int'){const cyc=(t.on+t.off)*1000,k=Math.floor(el/cyc),w=el%cyc;if(k>=t.rounds)return{clock:'Done',ph:t.rounds+' rounds complete',done:true};const work=w<t.on*1000;return{clock:fmtClock(work?t.on*1000-w:cyc-w),ph:(work?'WORK':'REST')+' · round '+(k+1)+' of '+t.rounds,work}}
+ if(t.mode==='int'){const cyc=(t.on+t.off)*1000,k=Math.floor(el/cyc),w=el%cyc;if(k>=t.rounds)return{clock:'Done',ph:t.rounds+' rounds complete',done:true};const work=w<t.on*1000;return{clock:fmtClock(work?t.on*1000-w:cyc-w),ph:(work?(t.lw||'WORK'):(t.lr||'REST'))+' · round '+(k+1)+' of '+t.rounds,work}}
  return{clock:fmtClock(el),ph:'Stopwatch'}}
 let CTI=null;
 function ensureCT(){clearInterval(CTI);const c=S.current;if(!c||!c.ct||!c.ct.run)return;CTI=setInterval(ctTick,250)}
@@ -1134,10 +1134,10 @@ function ctTick(){const c=S.current;if(!c||!c.ct||!c.ct.run){clearInterval(CTI);
  if(t.mode==='cd'&&ctEl(t)>=t.cd*60000){t.acc=t.cd*60000;t.run=false;save();alertDone();render();return}
  if(t.mode==='int'){if(v.done){t.acc=ctEl(t);t.run=false;save();alertDone();render();return}const ph=v.ph.split(' ')[0];if(t.lastPh&&t.lastPh!==ph)beepShort();t.lastPh=ph}}
 function cardioCard(c){if(!cardioShown(c))return '';const d=c.cd||(c.cd={type:defCType(),min:'',incline:'',speed:'',level:''});const t=c.ct||(c.ct={mode:'sw',run:false,acc:0,start:0,cd:+((S.settings.cardioPref||{}).min)||20,on:intSec()[0],off:intSec()[1],rounds:8});const v=ctView(t),log=c.cardioLog||[];
- const ty=d.type,spd=unit()==='kg'?'km/h':'mph',showInc=ty==='treadmill',showSpd=['treadmill','walk','run'].includes(ty),showLvl=['bike','elliptical','rower','stairs'].includes(ty);
+ const ty=d.type,spd=unit()==='kg'?'km/h':'mph',showInc=ty==='treadmill'||ty==='incline',showSpd=['treadmill','walk','run','incline','outdoor'].includes(ty),showLvl=['bike','elliptical','rower','stairs'].includes(ty);
  setTimeout(ensureCT,0);
- let h=`<div class="card" id="cardio"><div class="row"><h3 class="sp">🏃 Cardio${c.cardioOnly?'':' finisher'}</h3>${c.cardioOnly?'':'<button class="btn-s" data-act="cardioSkip">Skip</button>'}</div>`;
- if(S.settings.cardioPref)h+=`<div class="xs mut">Your target: ${S.settings.cardioPref.min} min ${esc((CT_NAME[S.settings.cardioPref.type]||'cardio').toLowerCase())} · ${cardioWeek(0)} of ${cardioTarget()} min this week</div>`;
+ let h=`<div class="card" id="cardio"><div class="row"><h3 class="sp">${c.cf?'🏃 Main cardio block':'🏃 Cardio'+(c.cardioOnly?'':' finisher')}</h3>${c.cardioOnly||c.cf?'':'<button class="btn-s" data-act="cardioSkip">Skip</button>'}</div>${c.cf?cfPlanHtml(c.cf):''}`;
+ if(S.settings.cardioPref&&!c.cf)h+=`<div class="xs mut">Your target: ${S.settings.cardioPref.min} min ${esc((CT_NAME[S.settings.cardioPref.type]||'cardio').toLowerCase())} · ${cardioWeek(0)} of ${cardioTarget()} min this week</div>`;
  h+=`<div class="row" style="margin-top:8px"><span class="sm sp">Type</span><select data-act="cdSel" data-k="type" style="width:180px">${CTYPES.map(([k,n,i])=>`<option value="${k}" ${ty===k?'selected':''}>${i} ${n}</option>`).join('')}</select></div>`;
  h+=`<div class="card" style="margin:10px 0;background:#10141b"><div class="seg">${[['sw','Stopwatch'],['cd','Countdown'],['int','Intervals']].map(([k,n])=>`<button class="${t.mode===k?'on':''}" data-act="ctMode" data-v="${k}">${n}</button>`).join('')}</div>
   <div style="text-align:center;margin:10px 0"><div id="ctClock" style="font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;color:${t.mode==='int'&&v.work===false?'var(--blue)':'var(--tx)'}">${v.clock}</div><div id="ctPh" class="xs mut">${esc(v.ph)}</div></div>
@@ -1172,7 +1172,7 @@ function wlDash(){if(pathOf()!=='weightloss')return '';const now=Date.now(),b=(S
  const lifts4=S.workouts.filter(w=>now-wTime(w)<28*864e5&&w.ex.length).length/4,cw=cardioWeek(0),tg=cardioTarget();
  const bwTxt=last&&old&&last!==old?((last.w-old.w>0?'+':'')+(Math.round((last.w-old.w)*10)/10)+' '+unit()):'—';
  return `<div class="card" style="border-color:var(--acc2)"><h3>🔥 Weight-loss dashboard</h3><div class="row" style="gap:6px;margin-top:8px"><div class="stat"><b>${bwTxt}</b><span class="xs mut">bodyweight${last&&old&&last!==old?' since '+shortDate(old.t):''}</span></div><div class="stat"><b>${Math.round(lifts4*10)/10}</b><span class="xs mut">workouts / wk (4 wk)</span></div><div class="stat"><b>${cw}/${tg}</b><span class="xs mut">cardio min this week</span></div></div><div class="xs mut" style="margin-top:6px">${last?'Weigh in 2–3× a week at the same time of day and watch the 2–4 week trend, not single days.':'Log your bodyweight (Body tab) 2–3× a week to see the trend here.'} General fitness info, not medical advice.</div></div>`}
-function pathTips(add){const P=pathOf();if(!P||P==='standard')return;const now=Date.now();
+function pathTips(add){const P=pathOf();if(!P||P==='standard')return;const now=Date.now();if(P==='cfirst'){cfTips(add);return}
  if(P==='weightloss'){const cw=cardioWeek(0),tg=cardioTarget();add(40,cw>=tg?'good':'info','🏃','Cardio: '+cw+' of '+tg+' min this week',cw>=tg?'Target hit — nice. Extra easy walking always helps.':'Add a short '+((CT_NAME[(S.settings.cardioPref||{}).type]||'cardio').toLowerCase())+' after your next workout, or log a cardio-only session from Today.');
   const b=(S.body||[]).slice().sort((x,y)=>x.t-y.t);if(!b.length||now-b[b.length-1].t>7*864e5)add(20,'info','⚖️','Log your bodyweight','Weigh in 2–3 times a week, same time of day. The 2–4 week trend matters more than any single day.');
   else{const old=b.filter(x=>x.t<=now-14*864e5).pop();if(old){const d=Math.round((b[b.length-1].w-old.w)*10)/10;add(18,d<0?'good':'info','📉','Bodyweight trend: '+(d>0?'+':'')+d+' '+unit()+' in '+Math.round((b[b.length-1].t-old.t)/864e5)+' days',d<0?'Steady progress. Keep lifting so most of the loss comes from fat, not muscle.':'Day-to-day swings are normal (water, salt, sleep). Keep the routine going and check the trend again in 2 weeks. General info, not medical advice.')}}
@@ -1184,7 +1184,7 @@ function pathTips(add){const P=pathOf();if(!P||P==='standard')return;const now=D
  if(P==='ret'){const R=rampInfo();if(R&&!R.done)add(70,'info','🔄','Return ramp: week '+(R.wk+1)+' of '+R.weeks,'Loads are about '+Math.round(R.f*100)+'% with '+R.sets+' sets. Finish every set feeling you had 3+ reps left. If something hurts, stop and check with a professional.');else if(R&&R.done)add(30,'good','✅','Ramp complete','You are back on normal progression. Keep 1–2 reps in reserve for another couple of weeks.')}
  if(['athletic','toning','ret','joint','glutes','beginner'].includes(P)){const cw=cardioWeek(0);if(cw>0)add(5,'info','🏃','Cardio: '+cw+' min this week','Logged from your cardio entries.')}}
 /* ---- onboarding steps for paths */
-function pathOb(st,a,T,next){const p=a.po||(a.po=JSON.parse(JSON.stringify(OB_PO_DEF)));const oo=(k,v,i,t,d)=>obOpt('po_'+k,v,i,t,d,String(p[k])===String(v));
+function pathOb(st,a,T,next){const p=a.po||(a.po=JSON.parse(JSON.stringify(OB_PO_DEF)));if(st.indexOf('cf_')===0)return cfOb(st,a,p,T,next);const oo=(k,v,i,t,d)=>obOpt('po_'+k,v,i,t,d,String(p[k])===String(v));
  switch(st){
  case 'path':return T('Pick your path','Your plan, tips and progress screen are tailored to it. Change it any time with Redo setup — history is kept.')+Object.entries(PATHS).map(([k,P])=>obOpt('path',k,P.i,P.n,(k==='joint'&&ageNumOf(a.age)>=50?'⭐ Suggested for you — ':'')+P.d,(a.path||'')===k)).join('');
  case 'wl_focus':return T('What do you want to focus on?','Pick any. The workouts add extra work for these areas.')+[['full','🧍','Full body','Balanced plan'],['glutes','🍑','Glutes & legs',''],['arms','💪','Arms & shoulders',''],['core','🎯','Core & waist','Ab work every session'],['back','🧘','Back & posture','Rows and rear-delt work']].map(([k,i,t,d])=>obOpt('po_focus',k,i,t,d,!!(p.focus||{})[k],1)).join('')+next();
@@ -1202,7 +1202,7 @@ function pathOb(st,a,T,next){const p=a.po||(a.po=JSON.parse(JSON.stringify(OB_PO
 const PATH_STEPS={weightloss:['wl_focus','wl_weights','wl_cardio','wl_style'],joint:['joint_bal'],glutes:['gl_days','gl_quads'],athletic:['ath_eq','ath_int'],ret:['ret_off','ret_why']};
 function pathPrep(a){a=Object.assign({},a);a.po=Object.assign(JSON.parse(JSON.stringify(OB_PO_DEF)),JSON.parse(JSON.stringify(a.po||{})));const P=a.path||'standard';
  const G={weightloss:'fat',joint:'general',glutes:'muscle',athletic:'general',toning:'general'}[P];if(G)a.goal=G;if(P==='beginner')a.exp='beginner';if(P==='weightloss')a.exp={new:'beginner',some:'intermediate',comfortable:'advanced'}[a.po.comfort]||'intermediate';
- if(P==='weightloss'&&a.po.ctype!=='none')a.cardio=true;if(P==='weightloss'&&a.po.focus&&a.po.focus.core)a.abs='all';if(P==='athletic'&&a.abs==null)a.abs='all';return a}
+ if(P==='weightloss'&&a.po.ctype!=='none')a.cardio=true;if(P==='weightloss'&&a.po.focus&&a.po.focus.core)a.abs='all';if(P==='athletic'&&a.abs==null)a.abs='all';if(P==='cfirst'){a.goal=a.po.cgoal==='fat'?'fat':'general';a.exp=(a.po.fit==='walk20'||a.po.fit==='w2j')?'beginner':'intermediate';a.cardio=false;a.abs='none';a.len=30}return a}
 function applyPath(s,a,isNew){const st=s.settings,P=a.path||'standard',o=a.po,oldPath=st.path;st.path=P;st.pathOpt=JSON.parse(JSON.stringify(o));
  if(P!=='ret')delete st.ramp;else{const wk={lt1:3,'1to3':3,'3to6':4,'6to12':4,'12plus':4}[o.off]||3;if(!(oldPath==='ret'&&st.ramp&&st.ramp.off===o.off))st.ramp={start:Date.now(),weeks:wk,off:o.off}}
  if(P==='joint')st.jointFriendly=true;else if(oldPath==='joint')st.jointFriendly=false;
@@ -1210,7 +1210,7 @@ function applyPath(s,a,isNew){const st=s.settings,P=a.path||'standard',o=a.po,ol
  st.circuit=P==='weightloss'&&o.style==='circuit';
  if(P==='weightloss'&&o.ctype!=='none')st.cardioPref={type:o.ctype,min:+o.cmin||20};else delete st.cardioPref;
  if(P==='athletic'){st.athEq=Object.assign({},o.athEq||{});delete st.athEq.none}else delete st.athEq;
- const pp=PATH_PROG[P];if(pp)s.program=pp;else if(Object.values(PATH_PROG).includes(s.program)&&s.program!=='joint')s.program=resolveSplit(a).program;
+ const pp=PATH_PROG[P];if(pp)s.program=pp;else if(Object.values(PATH_PROG).includes(s.program)&&s.program!=='joint')s.program=resolveSplit(a).program;cfApply(s,a,oldPath);
  return s}
 /* ---- v6 Game Mode: strength = current ability on key lifts; placement = training age + current working weights */
 const KEYPAT=[['push','Push',['chest_press','db_press','incline_press','h_floor_press','pushup','h_incline_pushup','h_knee_pushup']],['legs','Legs',['leg_press','db_goblet','hip_thrust','h_db_split','h_box_squat','h_split_squat']],['pull','Pull',['high_row','lat_pulldown','row_machine','seated_row','db_row','h_pullup']],['press','Overhead',['shoulder_press','db_shoulder','h_pike_pushup']]];
@@ -1242,6 +1242,101 @@ function howLevelsHtml(){return `<div class="sys" style="border-radius:14px;padd
  <tr><td><b>Volume</b></td><td>Average working sets per week over the last 4 weeks (60 = full).</td></tr><tr><td><b>Core</b></td><td>Ab and core sets in the last 4 weeks (32 = full).</td></tr><tr><td><b>Recovery</b></td><td>How well hard sessions are spaced (no same muscle again too soon), plus mobility and balance work.</td></tr></table>
  <div class="xs mut" style="margin-top:8px">The dashed outline is the same stats 4 weeks ago. Everything is worked out from this profile's own logs on this phone — rule-based, no AI, nothing uploaded.</div>
  <button class="btn-p btn-big" data-act="closeSheet" style="margin-top:12px">Got it</button></div>`}
+/* ====================== v7: CARDIO-FIRST PATH (cardio sessions + a short strength block) ====================== */
+(function(){const o=Object.assign({},PATHS);for(const k in PATHS)delete PATHS[k];for(const k in o){PATHS[k]=o[k];if(k==='weightloss')PATHS.cfirst={n:'Cardio first (with a little strength)',i:'🏃',d:'Mostly cardio — steady, intervals or incline walks — plus a short 15–20 min strength block'}}})();
+PATH_PROG.cfirst='cf';PATH_STEPS.cfirst=['cf_types','cf_fit','cf_goal','cf_len','cf_wdays','cf_int'];
+Object.assign(OB_PO_DEF,{ctypes:{},fit:'walk20',cgoal:'heart',clen:30,wdays:'2',cint:'mix'});
+CTYPES.splice(CTYPES.findIndex(x=>x[0]==='other'),0,['incline','Incline walk','⛰️'],['outdoor','Outdoor walk/run','🌳'],['hbw','Home bodyweight cardio','🏠']);
+CTYPES.forEach(x=>CT_NAME[x[0]]=x[1]);CT_NAME.treadmill='Treadmill walk/run';
+const CF_TYPES=[['treadmill','Treadmill walk/run','🏃'],['incline','Incline walk','⛰️'],['bike','Bike','🚴'],['elliptical','Elliptical','〰️'],['stairs','Stair climber','🪜'],['rower','Rower','🚣'],['outdoor','Outdoor walk/run','🌳'],['hbw','Home bodyweight cardio','🏠']];
+const CF_MACH={treadmill:'treadmill',incline:'treadmill',bike:'bike',elliptical:'elliptical',rower:'rower',stairs:'stairs'};
+const CF_FIT={walk20:'Can walk 20 min',w2j:'Walk 20 min → working up to jogging',jog20:'Can jog 20 min',run30:'Can run 30+ min'};
+const CF_GOAL={heart:'Heart health & endurance',fat:'Fat loss',race5k:'Train for a 5K',race10k:'Train for a 10K',move:'Just move more'};
+const CF_INT={steady:'Steady',intervals:'Intervals',mix:'Mix'};
+const CF_WD={'01':'0–1 weight days','2':'2 weight days','3':'3 weight days',all:'short weights every session'};
+const W2J=[[60,90,8],[90,120,6],[120,90,6],[180,90,5],[300,180,3],[480,120,2],[0,0,0,20],[0,0,0,25],[0,0,0,30]];
+for(let i=1;i<=6;i++){
+ PRE['cfS'+i]={get n(){return cfName(i,true)},day:'full',grp:'cf',circuit:1,cf:i,d:'Cardio block + a short full-body strength circuit (2 sets, 12–15 reps).',s:[sl('legs',PC.SQ,2),sl('push',PC.PUSH,2),sl('pull',PC.ROW,2),sl('hinge',PC.HINGE,2),F_(sl('sh',PC.SH,2),{f:'cf5'})]};
+ PRE['cfC'+i]={get n(){return cfName(i,false)},day:'full',grp:'cf',cf:i,cfc:1,d:'Cardio session.',s:[]}}
+PROGS.cf={n:'Cardio first',d:'Cardio-centric sessions (warm-up, main block, cool-down) with a short strength block on weight days.',list:['cfS1','cfC2','cfS3'],dyn:()=>cfList()};
+function cfOn(){return pathOf()==='cfirst'}
+function cfN(){return Math.max(2,Math.min(6,daysTarget()[0]||3))}
+function cfWset(){const N=cfN(),k=Math.min(N,{'01':1,'2':2,'3':3,all:N}[po().wdays]||2),s=new Set();for(let j=0;j<k;j++)s.add(Math.round(j*N/k)+1);return s}
+function cfList(){const N=cfN(),W=cfWset();return Array.from({length:N},(_,j)=>(W.has(j+1)?'cfS':'cfC')+(j+1))}
+function cfLowImpact(){const L=S.settings.limits||{};return !!(L.knees||L.back)}
+function cfTypes(){const o=po();let T=CF_TYPES.map(x=>x[0]).filter(k=>(o.ctypes||{})[k]);const home=atHome(),ck=(S.settings.homeEq||{}).ck||{};
+ if(home)T=T.map(t=>CF_MACH[t]&&!ck[CF_MACH[t]]?(t==='treadmill'||t==='incline'?'outdoor':'hbw'):t);
+ if(!T.length)T=home?(ck.treadmill?['treadmill']:ck.bike?['bike']:['outdoor','hbw']):['treadmill'];return [...new Set(T)]}
+function cfRunType(){const T=cfTypes();return T.find(t=>t==='treadmill'||t==='outdoor')||(atHome()?(((S.settings.homeEq||{}).ck||{}).treadmill?'treadmill':'outdoor'):'treadmill')}
+function cfWeek(){const st=S.settings.cfStart;if(!st)return 0;const cur=weekStart(Date.now()),need=Math.min(2,cfN());let n=0;
+ for(let k=weekStart(st);k<cur;k=weekStart(k+7*864e5+12*36e5)){const e=weekStart(k+7*864e5+12*36e5);if(S.workouts.filter(w=>wTime(w)>=k&&wTime(w)<e&&(+w.cardio||0)>0).length>=need)n++}return n}
+let CFMEMO={};
+function cfSession(i){const o=po(),key=[i,S.workouts.length,S.settings.cfStart,JSON.stringify(o),S.settings.days,S.atHome?1:0,S.settings.location,JSON.stringify(S.settings.homeEq||{}),JSON.stringify(S.settings.limits||{}),S.settings.age,new Date().toDateString()].join('|');if(CFMEMO[key])return CFMEMO[key];
+ const N=cfN(),p=cfWeek(),easy=p>0&&(p+1)%4===0,g=p-Math.floor((p+1)/4),fit=o.fit||'walk20',race=o.cgoal==='race5k'||o.cgoal==='race10k',low=cfLowImpact();
+ const warm=Math.max(5,warmMin()),cool=3,budget=Math.max(10,(+o.clen||30)-warm-cool),T=cfTypes();
+ const base={walk20:15,w2j:20,jog20:20,run30:30}[fit]||20;let grow=Math.round(base*Math.pow(1.1,g));const capped=grow>=budget;let steady=Math.min(budget,grow);if(easy)steady=Math.round(steady*0.8);
+ const walker=fit==='walk20'||fit==='w2j';let kind,type=T[(i-1)%T.length];
+ if(race&&walker&&!low)kind='w2j';else if(race){kind=i===N?'long':(i===1&&N>=3)?'int':'easy'}
+ else if(fit==='w2j'&&!low)kind=(N>=3&&i%3===0)?'steady':'w2j';
+ else kind={steady:'steady',intervals:(N>=4&&i%2===0)?'steady':'int',mix:['steady','int','hill'][(i-1)%3]}[o.cint]||'steady';
+ if(kind==='w2j'||(race&&!low))type=cfRunType();
+ if(type==='incline'&&kind!=='int')kind='hill';if(type==='hbw'&&kind==='hill')kind='int';
+ const runOK=!walker&&!low;const s={i,type,kind,warm,cool,easy,week:p+1,w:cfWset().has(i),on:0,off:0,rounds:0,incline:0,main:steady,lw:'',lr:''};const tn={treadmill:runOK?'treadmill run':'treadmill walk',outdoor:runOK?'outdoor run':'outdoor walk'}[type]||(CT_NAME[type]||'cardio').toLowerCase();
+const pace=type==='hbw'?'low-impact moves (march, step jacks, shadow boxing) at a pace you can talk through':walker||low?'brisk walk — you can talk in short sentences':'easy, conversational pace';
+ if(kind==='int'){let sp=type==='hbw'?[30,30]:({walk20:[60,90],w2j:[60,90],jog20:[60,60],run30:[90,60]}[fit]||[60,60]);s.on=Math.min(sp[0]*2,sp[0]+(type==='hbw'?5:10)*g);s.off=sp[1];s.rounds=Math.max(4,Math.floor(Math.min(budget,grow)*60/(s.on+s.off)));if(easy)s.rounds=Math.max(3,Math.round(s.rounds*0.75));s.main=Math.round(s.rounds*(s.on+s.off)/60);
+  const hard=type==='hbw'?(impactMax()>=1&&!low?'jacks / mountain climbers':'marching / step jacks / shadow boxing'):walker||low||!['treadmill','outdoor'].includes(type)?'faster ('+(['bike','elliptical','rower','stairs'].includes(type)?'higher level / cadence':'fast walk')+')':'harder run';
+  s.desc=`Intervals: ${s.rounds} × ${s.on} s ${hard} / ${s.off} s easy`;s.lw='WORK';s.lr='EASY'}
+ else if(kind==='w2j'){const e=W2J[Math.max(0,Math.min(8,easy?g-1:g))];if(e[3]){s.kind='steady';s.main=Math.min(e[3],Math.max(budget,e[3]));s.desc=`Continuous jog: ${s.main} min, slow and steady (walk breaks are fine)`}else{s.on=e[0];s.off=e[1];s.rounds=e[2];s.main=Math.round(s.rounds*(s.on+s.off)/60);s.desc=`Walk-to-jog: ${s.rounds} × ${s.on>=120?s.on/60+' min':s.on+' s'} jog / ${s.off>=120?s.off/60+' min':s.off+' s'} walk`;s.lw='JOG';s.lr='WALK'}}
+ else if(kind==='hill'){if(type==='treadmill'||type==='incline')s.incline=Math.max(1,Math.min(12,({walk20:3,w2j:4,jog20:5,run30:6}[fit]||3)+0.5*g-(easy?2:0)));
+  s.desc=['treadmill','incline','outdoor'].includes(type)?(type==='outdoor'?`Hills: ${s.main} min brisk walk on a hilly route`:`Incline walk: ${s.main} min at ${s.incline}% incline, brisk, hands off the rails`):`Higher level: ${s.main} min, 1–2 levels above your steady level`}
+ else if(kind==='long'){const cap=o.cgoal==='race5k'?35:60;s.main=Math.min(cap,Math.round(base*1.25*Math.pow(1.1,g)));if(easy)s.main=Math.round(s.main*0.8);s.desc=`Long easy ${runOK&&['treadmill','outdoor'].includes(type)?'run':tn}: ${s.main} min, conversational pace`}
+ else s.desc=`${kind==='easy'?'Easy':'Steady'} ${tn}: ${s.main} min, ${pace}`;
+ if(kind!=='int'&&kind!=='w2j'&&capped&&!easy&&g>0&&['bike','elliptical','rower','stairs'].includes(type))s.note='Time is at your session length — progress by going 1 level higher than last week.';
+ else if(kind==='steady'&&capped&&!easy&&g>0&&(type==='treadmill'))s.note='Time is at your session length — progress with +0.5% incline or a little more speed.';
+ if(easy)s.note='Easy week (every 4th week): about 20% less so your body can catch up.';
+ if(race){const w=fit==='walk20'||fit==='w2j'?9:o.cgoal==='race5k'?6:8;s.builder=(o.cgoal==='race5k'?'5K':'10K')+' builder · week '+Math.min(p+1,w)+' of '+w+(p+1>w?' (maintain)':'')}
+ s.kn={int:'Intervals',w2j:'Walk-to-jog',hill:type==='incline'||type==='treadmill'?'Incline walk':type==='outdoor'?'Hills':'Higher-level steady',long:'Long session',easy:'Easy cardio',steady:'Steady cardio'}[s.kind];
+ if(Object.keys(CFMEMO).length>200)CFMEMO={};return CFMEMO[key]=s}
+function cfName(i,w){try{const s=cfSession(i);return 'Day '+i+' · '+s.kn+(w?' + Strength':'')}catch(e){return 'Cardio day '+i}}
+function cfStrMin(id){const n=tplNominal(id);return n.length?Math.max(0,planMinutes(n)-warmMin()):0}
+function cfMinutes(id){const s=cfSession(PRE[id].cf);return s.warm+s.main+s.cool+(PRE[id].cfc?0:cfStrMin(id))}
+function cfTarget(){return cfList().reduce((a,id)=>a+cfSession(PRE[id].cf).main,0)}
+function cfPlanHtml(s){return `${s.builder?`<span class="badge" style="margin:4px 4px 4px 0;display:inline-block">🏁 ${esc(s.builder)}</span>`:''}${s.easy?'<span class="badge y" style="margin:4px 0;display:inline-block">Easy week</span>':''}<div class="sm" style="margin-top:4px">1️⃣ Warm-up · ${s.warm} min easy ${esc((CT_NAME[s.type]||'').toLowerCase())}</div><div class="sm" style="margin-top:4px">2️⃣ <b>${esc(s.desc)}</b> <span class="mut">(${s.main} min)</span></div><div class="sm" style="margin-top:4px">3️⃣ Cool-down · ${s.cool} min easy + light stretch</div>${s.note?`<div class="xs mut" style="margin-top:6px">${esc(s.note)}</div>`:''}`}
+function cfTodayHtml(pk,plan){const id=pk.tpl,s=cfSession(PRE[id].cf);let h=`<h2>🏃 Today's cardio · ${esc(CT_NAME[s.type]||'Cardio')} · ~${s.warm+s.main+s.cool} min</h2><div class="card">${cfPlanHtml(s)}<div class="xs mut" style="margin-top:6px">⏱️ The timer is preloaded with this plan when you start.</div></div>`;
+ h+=plan.length?`<h2>💪 Strength block · ${plan.length} moves · ~${cfStrMin(id)} min (circuit)</h2>`:`<div class="card sm mut">No weights today — just the cardio. Optional: add the Abs &amp; Core finisher during the session.</div>`;return h}
+function cfStartSetup(c,tpl){const s=cfSession(PRE[tpl].cf);c.cf={i:s.i,kind:s.kind,kn:s.kn,type:s.type,warm:s.warm,cool:s.cool,main:s.main,on:s.on,off:s.off,rounds:s.rounds,incline:s.incline,desc:s.desc,note:s.note||'',builder:s.builder||'',easy:s.easy,week:s.week,strength:!PRE[tpl].cfc};c.cardioShow=true;
+ c.cd={type:s.type,min:'',incline:s.incline?String(s.incline):'',speed:'',level:''};
+ c.ct=s.rounds?{mode:'int',run:false,acc:0,start:0,cd:s.main,on:s.on,off:s.off,rounds:s.rounds,lw:s.lw,lr:s.lr}:{mode:'cd',run:false,acc:0,start:0,cd:s.main,on:intSec()[0],off:intSec()[1],rounds:8}}
+function cfWeekly(n){const out=[];for(let b=n-1;b>=0;b--)out.push(cardioWeek(b));return out}
+function cfLongest(days){const from=Date.now()-days*864e5;return Math.max(0,...S.workouts.filter(w=>wTime(w)>from).flatMap(w=>cardioLogOf(w).map(e=>+e.min||0)))}
+function cfWeekCard(){if(!cfOn())return '';const cw=cardioWeek(0),tg=cfTarget(),tr=cfWeekly(4),L=cfLongest(28),s=cfSession(1);
+ return `<div class="card" style="border-color:var(--acc2)"><div class="row"><b class="sp">🏃 Cardio this week</b><span class="badge ${cw>=tg?'g':''}">${cw} / ${tg} min</span></div><div class="bar" style="margin:8px 0"><i style="width:${Math.min(100,tg?cw/tg*100:0)}%;background:var(--acc)"></i></div><div class="xs mut">Longest session (4 wk): <b style="color:var(--tx)">${L||'—'}${L?' min':''}</b> · Trend: ${tr.join(' → ')} min/week</div>${s.builder?`<div class="xs" style="margin-top:4px">🏁 ${esc(s.builder)}</div>`:''}${s.easy?'<div class="xs" style="margin-top:4px;color:var(--warn)">🌿 Easy week — about 20% less this week.</div>':''}</div>`}
+function cfDash(){if(!cfOn())return '';const tr=cfWeekly(8),mx=Math.max(1,...tr,cfTarget()),tg=cfTarget(),L=cfLongest(28),Lall=cfLongest(3650),ses=S.workouts.filter(w=>Date.now()-wTime(w)<28*864e5&&(+w.cardio||0)>0).length/4;
+ return `<div class="card" style="border-color:var(--acc2)"><h3>🏃 Cardio-first dashboard</h3><div class="row" style="gap:6px;margin-top:8px"><div class="stat"><b>${tr[7]}/${tg}</b><span class="xs mut">min this week</span></div><div class="stat"><b>${L||'—'}</b><span class="xs mut">longest session (4 wk)${Lall>L?' · best '+Lall:''}</span></div><div class="stat"><b>${Math.round(ses*10)/10}</b><span class="xs mut">sessions / wk (4 wk)</span></div></div>
+ <div class="xs mut" style="margin-top:8px">Minutes per week (last 8)</div><div style="display:flex;align-items:flex-end;gap:4px;height:64px;margin-top:4px;position:relative">${tr.map((m,i)=>`<div style="flex:1;background:${i===7?'var(--acc)':'var(--card2)'};border:1px solid var(--line);height:${Math.max(3,Math.round(m/mx*60))}px;border-radius:4px 4px 0 0" title="${m} min"></div>`).join('')}<div style="position:absolute;left:0;right:0;bottom:${Math.round(tg/mx*60)}px;border-top:1px dashed var(--acc2)"></div></div><div class="row xs mut"><span class="sp">8 wk ago</span><span>this week · dashed = target</span></div>
+ <div class="xs mut" style="margin-top:6px">Plan grows about 10% a week (or harder intervals / more incline), with an easier week every 4th. General fitness info, not medical advice.</div></div>`}
+function cfBits(){const o=po(),T=cfTypes();return [T.map(t=>CT_NAME[t]).join(', '),CF_FIT[o.fit],CF_GOAL[o.cgoal],(+o.clen||30)+' min cardio',CF_WD[o.wdays],CF_INT[o.cint]].filter(Boolean)}
+function cfSummaryRow(){const L=cfList(),m=L.map(id=>cfSession(PRE[id].cf).main),nW=L.filter(id=>!PRE[id].cfc).length;return `${L.length} cardio sessions/week · main block ${Math.min(...m)===Math.max(...m)?m[0]:Math.min(...m)+'–'+Math.max(...m)} min · ${cfTarget()} min/week to start · ${nW} with a short strength block · +~10%/week, easy week every 4th${cfSession(1).builder?' · '+cfSession(1).builder.replace(/ · week.*/,''):''}`}
+function cfQuests(){const N=cfN(),tg=Math.max(20,Math.round(cfTarget()/5)*5),lg=Math.max(...cfList().map(id=>cfSession(PRE[id].cf).main));
+ return [{id:'wk',n:'Finish '+N+' sessions this week',xp:40,need:N,val:x=>x.n},{id:'cardio',n:'Log '+tg+' cardio minutes',xp:60,need:tg,val:x=>x.cardio},{id:'long',n:'One cardio session of '+lg+'+ min',xp:35,need:lg,val:x=>x.long||0},{id:'bw',n:'Log your bodyweight',xp:15,need:1,val:x=>x.bw}]}
+function cfTips(add){const cw=cardioWeek(0),tg=cfTarget(),s=cfSession(1),now=Date.now(),L=cfLongest(28),Lp=Math.max(0,...S.workouts.filter(w=>wTime(w)<=now-7*864e5&&wTime(w)>now-35*864e5).flatMap(w=>cardioLogOf(w).map(e=>+e.min||0))),L7=cfLongest(7);
+ add(45,cw>=tg?'good':'info','🏃','Cardio: '+cw+' of '+tg+' min this week',cw>=tg?'Weekly target hit. Extra easy walking is always a bonus.':'Next session: '+(cfSession(+((PRE[nextTpl()]||{}).cf)||1).desc)+'.');
+ if(s.easy)add(50,'info','🌿','Easy week','Every 4th week the plan drops about 20% so you come back fresher. Keep the effort comfortable.');
+ if(s.builder)add(30,'info','🏁',s.builder,'Most runs stay easy and conversational; one session a week has faster pieces. Repeat a week if it felt too hard.');
+ if(L7>0&&L7>Lp&&Lp>0)add(35,'good','📈','Longest session yet in a month: '+L7+' min','Up from '+Lp+' min. Building time slowly is what improves endurance.');
+ const st=S.workouts.filter(w=>wTime(w)>=weekStart(now)&&w.ex.length).length,need=cfList().filter(id=>!PRE[id].cfc).length;if(need&&st<need)add(15,'info','💪','Strength block: '+st+' of '+need+' this week','A short 2-set full-body circuit keeps muscles and joints strong for your cardio.');
+ add(8,'info','🗣️','Talk test','Steady sessions should feel like you could talk in short sentences. Intervals are the only part that should feel hard. General fitness info, not medical advice.')}
+/* onboarding steps */
+function cfOb(st,a,p,T,next){const oo=(k,v,i,t,d)=>obOpt('po_'+k,v,i,t,d,String(p[k])===String(v));
+ switch(st){
+ case 'cf_types':return T('Which cardio do you like?','Pick any. Sessions rotate through them. At home, machines you don’t have are swapped for outdoor or bodyweight cardio.')+CF_TYPES.map(([k,n,i])=>obOpt('po_ctypes',k,i,n,{incline:'Treadmill at an incline',hbw:'Marching, step jacks, shadow boxing — no equipment'}[k]||'',!!(p.ctypes||{})[k],1)).join('')+next();
+ case 'cf_fit':return T('Where is your cardio fitness now?','Sets the starting minutes and interval lengths.')+oo('fit','walk20','🚶','I can walk 20 min','')+oo('fit','w2j','🚶‍♂️','I can walk 20 min — and want to work up to jogging','Walk-to-jog plan')+oo('fit','jog20','🏃','I can jog 20 min','')+oo('fit','run30','🏃‍♂️','I can run 30+ min','');
+ case 'cf_goal':return T('What’s your cardio goal?','')+oo('cgoal','heart','❤️','Heart health & endurance','General fitness')+oo('cgoal','fat','🔥','Fat loss','More total minutes')+oo('cgoal','race5k','🏁','Train for a 5K','Simple 5K builder')+oo('cgoal','race10k','🏁','Train for a 10K','Builds a long run toward 60 min')+oo('cgoal','move','🚶','Just move more','Easy, steady sessions');
+ case 'cf_len':return T('How long for cardio each session?','Includes warm-up and cool-down. Weight days add a 15–20 min strength block.')+[[20,'⚡','About 20 min',''],[30,'⏱️','About 30 min',''],[45,'🕐','About 45 min',''],[60,'🕑','About 60 min','']].map(([v,i,t,d])=>oo('clen',v,i,t,d)).join('');
+ case 'cf_wdays':return T('How many days include weights?','A short full-body block: 4–5 moves, 2 sets of 12–15 reps.')+oo('wdays','01','1️⃣','0–1 days','One optional strength block a week')+oo('wdays','2','2️⃣','2 days','Recommended')+oo('wdays','3','3️⃣','3 days','')+oo('wdays','all','🔁','Every session, short','4 moves, ~15 min');
+ case 'cf_int':return T('Steady, intervals or a mix?','')+oo('cint','steady','〰️','Steady','Same comfortable pace the whole time')+oo('cint','intervals','⏱️','Intervals','Short faster pieces with easy recovery — the timer counts them for you')+oo('cint','mix','🔀','Mix','Rotates steady, intervals and incline/hills across the week')}
+ return null}
+function cfApply(s,a,oldPath){const st=s.settings;if(a.path==='cfirst'){if(oldPath!=='cfirst'||!st.cfStart)st.cfStart=Date.now();delete st.cardioPref;st.treadmill=false}else delete st.cfStart}
 /* ====================== ONBOARDING ====================== */
 let OB=null;
 const OB_STEPS=['name','goal','exp','days','len','split','equip','limits','cardio','abs','units','bw','startw','summary'];
@@ -1280,15 +1375,15 @@ function obPreview(){const tmp=applyAnswers(JSON.parse(JSON.stringify(OB.redo?S:
  return withState(tmp,()=>{const L=progList();const pk=todayPick(),plan=pickPlan(pk);
   const seq=L?L.map(id=>({n:PRE[id].n,plan:buildTplPlan(id)})):S.settings.rotation.map(d=>({n:DAYS[d].n,plan:buildPlan(d)}));
   const lifts=[];seq.forEach(x=>x.plan.forEach(p=>{const e=getEx(p.id);if(e.m!=='abs'&&!e.bw&&!e.band&&!lifts.includes(p.id))lifts.push(p.id)}));
-  return{tmp,prog:PROGS[S.program],rot:seq.map(x=>x.n),first:{n:pk.tpl?PRE[pk.tpl].n:DAYS[pk.day].n+' day',plan,mins:planMinutes(plan)},mins:seq.map(x=>planMinutes(x.plan)),lifts:lifts.slice(0,8).map(id=>({id,name:getEx(id).name,est:estOf(getEx(id)),u:unit()}))}})}
+  return{tmp,prog:PROGS[S.program],rot:seq.map(x=>x.n),first:{n:pk.tpl?PRE[pk.tpl].n:DAYS[pk.day].n+' day',plan,mins:pk.tpl&&PRE[pk.tpl].cf?tplMinutes(pk.tpl):planMinutes(plan),cf:pk.tpl&&PRE[pk.tpl].cf?{s:cfSession(PRE[pk.tpl].cf),str:cfStrMin(pk.tpl)}:null},mins:L&&L.some(id=>PRE[id].cf)?L.map(tplMinutes):seq.map(x=>planMinutes(x.plan)),lifts:lifts.slice(0,8).map(id=>({id,name:getEx(id).name,est:estOf(getEx(id)),u:unit()}))}})}
 function obOpt(k,v,icon,title,desc,on,multi){return `<button class="opt ${on?'on':''}" data-act="${multi?'obTog':'obPick'}" data-k="${k}" data-v="${v}"><span class="oi">${icon}</span><span class="sp"><b>${esc(title)}</b>${desc?`<span class="xs mut">${esc(desc)}</span>`:''}</span>${multi?`<span class="ck2">${on?'✓':''}</span>`:''}</button>`}
-function vOnboard(){const st=obSteps()[OB.i],a=OB.a,n=obSteps().length;const canSkip=['path','wl_focus','wl_weights','wl_cardio','wl_style','joint_bal','gl_days','gl_quads','ath_eq','ath_int','ret_off','ret_why','game','age','where','homeeq','exp','split','equip','limits','cardio','abs','units','bw','startw'].includes(st);
+function vOnboard(){const st=obSteps()[OB.i],a=OB.a,n=obSteps().length;const canSkip=['cf_types','cf_fit','cf_goal','cf_len','cf_wdays','cf_int','path','wl_focus','wl_weights','wl_cardio','wl_style','joint_bal','gl_days','gl_quads','ath_eq','ath_int','ret_off','ret_why','game','age','where','homeeq','exp','split','equip','limits','cardio','abs','units','bw','startw'].includes(st);
  let h=`<div class="row" style="margin-top:4px"><button class="btn-s" data-act="obBack">← Back</button><span class="sp"></span>${canSkip?'<button class="btn-s" data-act="obSkip">Skip</button>':''}<button class="btn-s" data-act="obCancel" aria-label="Cancel">✕</button></div>`;
  h+=`<div class="dots">${obSteps().map((s,i)=>`<i class="${i<OB.i?'d':i===OB.i?'c':''}"></i>`).join('')}</div><div class="xs mut">${OB.redo?'Redo setup · ':''}Step ${OB.i+1} of ${n}</div>`;
  const T=(t,s)=>`<h1 style="font-size:26px;margin:6px 0 4px">${t}</h1><div class="mut sm" style="margin-bottom:12px">${s||''}</div>`;
  const next=(lbl,dis)=>`<button class="btn-p btn-big" data-act="obNext" style="margin-top:14px" ${dis?'disabled':''}>${lbl||'Next'}</button>`;
  switch(st){
- case 'path':case 'wl_focus':case 'wl_weights':case 'wl_cardio':case 'wl_style':case 'joint_bal':case 'gl_days':case 'gl_quads':case 'ath_eq':case 'ath_int':case 'ret_off':case 'ret_why':h+=pathOb(st,a,T,next);break;
+ case 'cf_types':case 'cf_fit':case 'cf_goal':case 'cf_len':case 'cf_wdays':case 'cf_int':case 'path':case 'wl_focus':case 'wl_weights':case 'wl_cardio':case 'wl_style':case 'joint_bal':case 'gl_days':case 'gl_quads':case 'ath_eq':case 'ath_int':case 'ret_off':case 'ret_why':h+=pathOb(st,a,T,next);break;
  case 'name':h+=T(OB.redo?'Your name':'What should we call you?','This shows on the profile screen.')+`<input type="text" id="obName" maxlength="24" value="${esc(a.name||'')}" placeholder="First name" autocomplete="off" style="font-size:20px;min-height:56px">`;
   if(!OB.redo)h+=`<div class="card" style="margin-top:14px"><b>PIN (optional)</b><div class="xs mut">4 digits. Stored only on this phone — it just stops friends opening your profile by accident. Not a real password.</div><input type="password" id="obPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="${esc(a.pin||'')}" placeholder="Leave empty for no PIN" style="margin-top:8px;font-size:20px;letter-spacing:6px"></div>`;
   h+=next();break;
@@ -1314,11 +1409,11 @@ function vOnboard(){const st=obSteps()[OB.i],a=OB.a,n=obSteps().length;const can
   h+=T((a.name?esc(a.name)+', here':'Here')+"'s your plan",'Built from your answers. You can change anything later in Settings or Plans.');
   h+=`<div class="card"><div class="row"><h3 class="sp">${esc(pv.prog.list?pv.prog.n:'Push / Pull / Legs (adaptive)')}</h3><span class="badge g">${esc(s.days)}×/week</span></div><div class="xs mut" style="margin-top:4px">${esc(pv.prog.d)}</div>
    <div class="row wrap" style="margin-top:8px;gap:6px">${pv.rot.map((r,i)=>`<span class="chip" style="display:inline-flex;align-items:center;min-height:32px;${i===0?'background:var(--acc2);color:#04120a;font-weight:700':'background:var(--card2)'};border:1px solid var(--line)">${esc(r)}</span>`).join('<span class="mut">→</span>')}</div>
-   <table style="margin-top:10px"><tr><td class="sm mut">Path</td><td class="sm"><b>${esc((PATHS[s.path]||PATHS.standard).i+' '+(PATHS[s.path]||PATHS.standard).n)}</b>${withState(pv.tmp,()=>{const x=settingsPathCard().match(/<div class="xs mut">(.*?)<\/div>/);return x&&x[1]?'<div class="xs mut">'+x[1]+'</div>':''})}</td></tr>${s.cardioPref?'<tr><td class="sm mut">Cardio</td><td class="sm">'+esc(CT_NAME[s.cardioPref.type]||'')+' · '+s.cardioPref.min+' min after each workout (tracked with a timer) · '+withState(pv.tmp,()=>cardioTarget())+' min/week</td></tr>':''}${s.ramp?'<tr><td class="sm mut">Ramp</td><td class="sm">'+s.ramp.weeks+' weeks: ~55% loads and 2 sets in weeks 1–2, then building back to 100%</td></tr>':''}${s.howto?'<tr><td class="sm mut">Learning</td><td class="sm">How-to tips on new exercises · light first week · slower weight jumps</td></tr>':''}<tr><td class="sm mut">Goal</td><td class="sm">${esc(GOALS[s.goal].n)} · ${esc(GOALS[s.goal].reps)}</td></tr><tr><td class="sm mut">Sessions</td><td class="sm">~${mn===mx?mn:mn+'–'+mx} min lifting · rest ${s.rest}s${s.treadmill?' · + cardio finisher':''}</td></tr>
+   <table style="margin-top:10px"><tr><td class="sm mut">Path</td><td class="sm"><b>${esc((PATHS[s.path]||PATHS.standard).i+' '+(PATHS[s.path]||PATHS.standard).n)}</b>${withState(pv.tmp,()=>{const x=settingsPathCard().match(/<div class="xs mut">(.*?)<\/div>/);return x&&x[1]?'<div class="xs mut">'+x[1]+'</div>':''})}</td></tr>${s.path==='cfirst'?'<tr><td class="sm mut">Cardio</td><td class="sm">'+esc(withState(pv.tmp,()=>cfSummaryRow()))+'</td></tr>':''}${s.cardioPref?'<tr><td class="sm mut">Cardio</td><td class="sm">'+esc(CT_NAME[s.cardioPref.type]||'')+' · '+s.cardioPref.min+' min after each workout (tracked with a timer) · '+withState(pv.tmp,()=>cardioTarget())+' min/week</td></tr>':''}${s.ramp?'<tr><td class="sm mut">Ramp</td><td class="sm">'+s.ramp.weeks+' weeks: ~55% loads and 2 sets in weeks 1–2, then building back to 100%</td></tr>':''}${s.howto?'<tr><td class="sm mut">Learning</td><td class="sm">How-to tips on new exercises · light first week · slower weight jumps</td></tr>':''}<tr><td class="sm mut">Goal</td><td class="sm">${s.path==='cfirst'?esc(CF_GOAL[s.pathOpt.cgoal]||'')+' · strength block 2 × 12–15 reps':esc(GOALS[s.goal].n)+' · '+esc(GOALS[s.goal].reps)}</td></tr><tr><td class="sm mut">Sessions</td><td class="sm">${s.path==='cfirst'?'~'+(mn===mx?mn:mn+'–'+mx)+' min each (warm-up, cardio, cool-down; strength block on weight days, done as a circuit)':`~${mn===mx?mn:mn+'–'+mx} min lifting · rest ${s.rest}s${s.treadmill?' · + cardio finisher':''}`}</td></tr>
    <tr><td class="sm mut">Where</td><td class="sm">${{gym:'Gym',home:'Home',hybrid:'Gym + home'}[s.location||'gym']}</td></tr>${(s.location||'gym')!=='home'?`<tr><td class="sm mut">Gym kit</td><td class="sm">${['machines','cables','dumbbells','bodyweight'].filter(k=>s[k]).join(', ')}</td></tr>`:''}${(s.location||'gym')!=='gym'?`<tr><td class="sm mut">Home kit</td><td class="sm">${esc(homeEqTxt(s.homeEq,s.unit))}</td></tr>`:''}
-   <tr><td class="sm mut">Age</td><td class="sm">${s.age?esc(AGES.find(x=>x[0]===s.age)[1])+' · '+withState(pv.tmp,()=>warmMin())+' min warm-up'+(withState(pv.tmp,()=>slowProg())?' · gentler weight jumps':''):'Not set'}</td></tr><tr><td class="sm mut">Abs</td><td class="sm">${{legs:'on leg / lower days',all:'every workout',none:'none'}[s.absMode]}</td></tr>
+   <tr><td class="sm mut">Age</td><td class="sm">${s.age?esc(AGES.find(x=>x[0]===s.age)[1])+' · '+withState(pv.tmp,()=>warmMin())+' min warm-up'+(withState(pv.tmp,()=>slowProg())?' · gentler weight jumps':''):'Not set'}</td></tr><tr><td class="sm mut">Abs</td><td class="sm">${s.path==='cfirst'?'optional core finisher in any session':{legs:'on leg / lower days',all:'every workout',none:'none'}[s.absMode]}</td></tr>
    <tr><td class="sm mut">Limitations</td><td class="sm">${lim.length?lim.map(k=>'<b>'+esc(LIMITS[k].n)+'</b>: '+esc(LIMITS[k].d)).join('<br>'):'None'}</td></tr></table></div>`;
-  h+=`<h2>First workout: ${esc(pv.first.n)} · ~${pv.first.mins} min</h2><div class="card"><table>${pv.first.plan.map(p=>{const e=withState(pv.tmp,()=>getEx(p.id));return `<tr><td class="sm">${esc(e.name)}</td><td class="sm" style="white-space:nowrap">${p.sets}×${repsTxt(e,p.lo,p.hi)}</td><td class="sm" style="text-align:right;white-space:nowrap">${esc(withState(pv.tmp,()=>loadTxt(e,p.w)))}</td></tr>`}).join('')}</table><div class="xs mut" style="margin-top:6px">Weights are starting estimates — change them during the workout and the app learns from your logs.</div></div>`;
+  h+=`<h2>First ${pv.first.cf?'session':'workout'}: ${esc(pv.first.n)} · ~${pv.first.mins} min</h2>${pv.first.cf?'<div class="card">'+cfPlanHtml(pv.first.cf.s)+'</div><h3 style="margin:10px 0 6px">💪 Strength block · ~'+pv.first.cf.str+' min (circuit)</h3>':''}<div class="card"><table>${pv.first.plan.map(p=>{const e=withState(pv.tmp,()=>getEx(p.id));return `<tr><td class="sm">${esc(e.name)}</td><td class="sm" style="white-space:nowrap">${p.sets}×${repsTxt(e,p.lo,p.hi)}</td><td class="sm" style="text-align:right;white-space:nowrap">${esc(withState(pv.tmp,()=>loadTxt(e,p.w)))}</td></tr>`}).join('')}</table><div class="xs mut" style="margin-top:6px">Weights are starting estimates — change them during the workout and the app learns from your logs.</div></div>`;
   if(ageNumOf(s.age)&&ageNumOf(s.age)<18)h+=`<div class="card" style="border-color:var(--blue)">🧒 <b>Train with an adult around.</b> <span class="sm mut">Focus on clean form and steady reps. The app never asks for max-effort tests.</span></div>`;
   if(s.location==='hybrid'){const hp=withState(pv.tmp,()=>{S.atHome=true;try{const L=progList();return L?L.map(id=>PRE[id].n).join(' → '):''}finally{S.atHome=false}});if(hp)h+=`<div class="card"><b>🏠 Home days</b><div class="sm mut">${esc(hp)} — tap “At home” on the Today screen.</div></div>`}
   h+=`<button class="btn-p btn-big" data-act="obFinish" style="margin-top:6px">${OB.redo?'Save my new plan':'Start'}</button>`;
@@ -1437,7 +1532,7 @@ function act(a,d,el){
  case 'todayTpl':S.dayOverride='tpl:'+d.v;save();VIEW='today';try{window.scrollTo(0,0)}catch(e){}render();toast(PRE[d.v].n+' set for today');break;
  case 'addTpl':{if(!c){toast('Start a workout first');break}const have=new Set(c.ex.map(x=>x.id));const add=buildTplPlan(d.v).filter(p=>!have.has(p.id));add.forEach(p=>c.ex.push(makeExLog(p)));save();closeSheet();render();toast(add.length?'Added '+add.length+' exercises':'Already in this workout');if(add.length)setTimeout(()=>{const el=$('#ex'+(c.ex.length-add.length));el&&el.scrollIntoView({behavior:'smooth'})},50);break}
  case 'allTips':sheet(`<h3>Coach tips</h3><div class="xs mut">Rules run on your own logs on this phone — not a live AI.</div>${coachTips().map(tipHtml).join('')}<button class="btn-big" data-act="closeSheet" style="margin-top:8px">Close</button>`);break;
- case 'progTab':progTab=d.v;render();break;
+ case 'progTab':progTab=d.v;PT_PICK=1;render();break;
  case 'metric':progMetric=d.v;render();break;
  case 'bwAdd':{const el2=$('#bwIn');const v=parseFloat(el2&&el2.value);if(!(v>0)||v>1500){toast('Enter your weight in '+unit());break}const t=Date.now(),day0=new Date(t).toDateString();S.body=(S.body||[]).filter(b=>new Date(b.t).toDateString()!==day0);S.body.push({t,w:Math.round(v*10)/10});S.body.sort((a,b)=>a.t-b.t);save();render();toast('Saved '+fmtW(v)+' '+unit());break}
  case 'bwDel':if(confirm('Delete this bodyweight entry?')){S.body=(S.body||[]).filter(b=>String(b.t)!==d.v);save();render()}break;
