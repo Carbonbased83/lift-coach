@@ -476,8 +476,6 @@ function buildPlan0(day){
   if(slot.ownT&&!ownT())continue;if(slot.notT&&ownT())continue;
   if(absMode()==='none'&&slot.c.every(c=>(LIB[c]||{}).m==='abs'))continue;
   let cands=slot.c.filter(allowed);if(!cands.length&&SLOT_FB[slot.k])cands=SLOT_FB[slot.k].filter(allowed);if(!cands.length)continue;if(!slot.own&&cands.length>1)cands=cands.filter(c=>!((LIB[c]||{}).obl&&prio(c)>0)); // v9: back-limited, joint, 60+ and beginner profiles rotate Pallof/dead bug instead of the twisting machine
-  // v11: Thomas — Face Pull (Rope) replaces Reverse Pec Deck as the rear-delt pick on pull day
-  if(ownT()&&day==='pull'&&slot.k==='rear'&&cands.includes('face_pull'))cands=['face_pull'].concat(cands.filter(c=>c!=='face_pull'));
 cands=cands.slice().sort((a,b)=>prio(a)-prio(b));
   let pick=null;const pref=S.prefs[day+'.'+slot.k]||(slot.prefAlt&&S.prefs[slot.prefAlt]);
   if(pref&&!used.has(pref)&&listable(pref))pick=pref;
@@ -494,7 +492,7 @@ cands=cands.slice().sort((a,b)=>prio(a)-prio(b));
 // v9: Thomas (the original, seeded profile) gets the Matrix Rotary Torso added to the abs block of every gym leg day.
 function ownRot(){return !S.noSeed&&!atHome()&&absMode()!=='none'}
 // v10: Thomas (original, seeded profile) at the gym: underhand close-grip pulldown REPLACES one lat-dominant move on pull/back days (pull days felt lat-heavy; Express unchanged); triceps moved from push day to the END of pull day.
-// v11: Thomas — Face Pull (Rope) replaces Reverse Pec Deck on pull/back days (same rear-delt slot; keeps underhand pulldown + triceps at end of pull).
+// v11: Face Pull (Rope) — renamed library entry + swap option for rear delts (Reverse Pec Deck stays the default).
 function ownT(){return !S.noSeed&&!atHome()}
 const OWN_UH={pullA:'single',pullB:'straight',broBack:'straight'};
 const OWN_TRI_OFF=['pushA','pushB','pushX'];
@@ -505,8 +503,6 @@ const OWN_TRI={pullA:[['tri',['tri_pushdown','tri_machine','db_tri_kick'],3,1,'p
 const OWN_DAYS={push:{n:'Push',m:['chest','shoulders']},pull:{n:'Pull',m:['back','reardelts','biceps','triceps']}};
 function ownTSlots(id,s){if(!ownT())return s;if(OWN_TRI_OFF.includes(id))return s.filter(x=>!/^tri/.test(x.k));
  if(OWN_TRI[id])s=s.concat(OWN_TRI[id].map(([k,c,n,t,pa])=>Object.assign(sl(k,c,n,t),{prefAlt:pa,note:OWN_TRI_NOTE[k]})));
- // v11: put Face Pull (Rope) first in any rear slot on pull/back days
- if(PRE[id]&&(PRE[id].day==='pull'||PRE[id].day==='back'))s=s.map(x=>x.k==='rear'&&x.c.includes('face_pull')?Object.assign({},x,{c:['face_pull'].concat(x.c.filter(c=>c!=='face_pull'))}):x);
  if(OWN_UH[id]){const i=s.findIndex(x=>x.k===OWN_UH[id]);if(i<0)return s;return s.slice(0,i).concat([sl('uh',['uh_pulldown'],3,s[i].t)],s.slice(i+1))}
  return s}
 function tplSlots(id){const T_=PRE[id];let s=T_.s;if(T_.addon)return s;if(T_.cfc)return [];s=ownTSlots(id,s);if(ownRot()&&!T_.cf&&!T_.circuit&&(T_.day==='legs'||T_.day==='lower'))s=s.concat([Object.assign(sl('rot',['rotary_torso'],2,2),{keep:1})]);const isAbs=x=>x.c.every(c=>(LIB[c]||{}).m==='abs'),am=absMode();if(am==='none')s=s.filter(x=>x.keep||!isAbs(x));else if(am==='all'&&!s.some(isAbs))s=s.concat([sl('absx',['cable_crunch','ab_crunch','knee_raise','dead_bug','h_plank','h_bird_dog'],2,2)]);s=s.filter(x=>!x.f||slotOn(x.f));if(jointOn()&&po().bal!=='0'&&!s.some(x=>x.k==='mob'))s=s.concat([sl('mob',PC.MOB,2)]);return s}
